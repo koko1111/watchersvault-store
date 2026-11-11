@@ -4,7 +4,7 @@ name: OmniRoute
 tagline: One endpoint for hundreds of AI models
 icon: https://raw.githubusercontent.com/koko1111/watchersvault-store/master/watchersvault-omniroute/icon.svg
 category: ai
-version: "3.8.54"
+version: "3.8.55"
 port: 20128
 description: >-
   OmniRoute is an OpenAI-compatible gateway for a large set of model
@@ -23,13 +23,24 @@ description: >-
 
 
   Tailscale HTTPS is optional. Leave the public address and auth key blank to
-  keep using the Umbrel address. To turn it on, enable HTTPS and MagicDNS in
-  the Tailscale admin console, then set the public address, secure cookies,
-  and a reusable auth key in this app's settings and restart. That joins a
-  separate tailnet node named for OmniRoute and serves it with Caddy. It does
-  not open ports 80 or 443 on the Umbrel, and it does not replace the Umbrel
-  Tailscale app. The tailnet address is protected by OmniRoute's own password
-  and API keys.
+  keep using the Umbrel address. It does not open ports 80 or 443 on the
+  Umbrel, and it does not replace the Umbrel Tailscale app. The tailnet
+  address uses OmniRoute's own password and API key.
+
+
+  To turn Tailscale HTTPS on:
+
+  1. In the Tailscale admin console, enable HTTPS certificates and MagicDNS.
+
+  2. Create a reusable auth key.
+
+  3. Update this app, then set NEXT_PUBLIC_BASE_URL to
+  https://omniroute.your-tailnet.ts.net, AUTH_COOKIE_SECURE to true,
+  TS_AUTHKEY to that key, and leave TS_HOSTNAME as omniroute unless you want
+  another name.
+
+  4. Restart the app. That joins a separate tailnet node and serves it with
+  Caddy. Tailnet peers can open that https address directly.
 developer: cheaper-inference
 website: https://github.com/cheaper-inference/OmniRoute
 submitter: Watchers
@@ -39,9 +50,9 @@ support: https://github.com/cheaper-inference/OmniRoute/issues
 gallery:
   - https://raw.githubusercontent.com/koko1111/watchersvault-store/master/watchersvault-omniroute/icon.svg
 releaseNotes: >-
-  Adds optional Tailscale HTTPS through Caddy. Leave the public address and
-  auth key blank to keep the Umbrel address only. The container image remains
-  diegosouzapw/omniroute:latest.
+  Optional Tailscale HTTPS stays off until you set it. The app description
+  lists the four setup steps. Leave the public address and auth key blank to
+  keep the Umbrel address only.
 dependencies: []
 path: ""
 defaultUsername: ""

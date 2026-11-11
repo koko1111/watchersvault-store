@@ -13,4 +13,13 @@ https://github.com/koko1111/watchersvault-store
 ## Apps
 
 - **YT Cut and Splice** downloads only the YouTube range you select.
-- **OmniRoute** is an OpenAI-compatible gateway. The dashboard stays behind Umbrel login. `/v1` requires an OmniRoute API key, which you create in the dashboard. The first launch asks for a dashboard password and stores generated signing secrets in the app data directory. `OMNIROUTE_MEMORY_MB` defaults to 4096. Optional Tailscale HTTPS is off until you set a public `https://*.ts.net` address and a Tailscale auth key in the app settings.
+- **OmniRoute** is an OpenAI-compatible gateway. The dashboard stays behind Umbrel login. `/v1` requires an OmniRoute API key, which you create in the dashboard. The first launch asks for a dashboard password and stores generated signing secrets in the app data directory. `OMNIROUTE_MEMORY_MB` defaults to 4096.
+
+## Optional OmniRoute Tailscale HTTPS
+
+Leave the public address and auth key blank to keep the Umbrel address. This does not open ports 80 or 443, and it does not replace the Umbrel Tailscale app.
+
+1. In the Tailscale admin console, enable HTTPS certificates and MagicDNS.
+2. Create a reusable auth key.
+3. In the OmniRoute app settings, set `NEXT_PUBLIC_BASE_URL` to `https://omniroute.your-tailnet.ts.net`, `AUTH_COOKIE_SECURE` to `true`, `TS_AUTHKEY` to that key, and leave `TS_HOSTNAME` as `omniroute` unless you want another name.
+4. Restart the app. Tailnet peers open that https address directly. It uses OmniRoute's own password and API key.
