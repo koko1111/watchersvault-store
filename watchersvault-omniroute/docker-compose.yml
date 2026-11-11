@@ -1,0 +1,72 @@
+version: "3.7"
+
+services:
+  app_proxy:
+    environment:
+      APP_HOST: watchersvault-omniroute_server_1
+      APP_PORT: 20128
+      # Dashboard stays behind Umbrel login. API clients use an OmniRoute key.
+      PROXY_AUTH_WHITELIST: "/v1/*,/v1"
+
+  setup:
+    image: alpine:3.22@sha256:49340b346798875b5592e5d420241f2f9cfba5f47e62ebb1446a1b34734e898f
+    user: "0:0"
+    restart: "no"
+    command:
+      - sh
+      - -c
+      - |
+        mkdir -p /mnt/data /mnt/redis
+        chown -R 1000:1000 /mnt/data
+        chown -R 999:1000 /mnt/redis
+    volumes:
+      - ${APP_DATA_DIR}/data:/mnt/data
+      - ${APP_DATA_DIR}/redis:/mnt/redis
+
+  redis:
+    image: redis:8.6.5-alpine@sha256:cd218f4b106a332c5c992e38a9480bfb9d7e9f8f7b0ec9a0023bfa36d9a408f9
+    restart: on-failure
+    command:
+      - redis-server
+      - --save
+      - "60"
+      - "1"
+      - --dir
+      - /data
+      - --loglevel
+      - warning
+    volumes:
+      - ${APP_DATA_DIR}/redis:/data
+    depends_on:
+      setup:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  server:
+    image: diegosouzapw/omniroute:3.8.53@sha256:b52a17661a1aff42ffb78f349f423e986dfc55b57274f28559f8387622ef8ee4
+    restart: on-failure
+    stop_grace_period: 40s
+    environment:
+      DATA_DIR: /app/data
+      REDIS_URL: redis://redis:6379
+      HOSTNAME: 0.0.0.0
+      PORT: "20128"
+      REQUIRE_API_KEY: "true"
+      OMNIROUTE_MEMORY_MB: "4096"
+    volumes:
+      - ${APP_DATA_DIR}/data:/app/data
+    depends_on:
+      setup:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "healthcheck.mjs"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s

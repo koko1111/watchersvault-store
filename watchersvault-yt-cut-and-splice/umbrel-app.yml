@@ -1,0 +1,31 @@
+manifestVersion: 1
+id: watchersvault-yt-cut-and-splice
+name: YT Cut and Splice
+tagline: Download only the clip you select
+icon: https://raw.githubusercontent.com/koko1111/watchersvault-store/master/watchersvault-yt-cut-and-splice/icon.svg
+category: media
+version: "1.0.0"
+port: 5000
+description: >-
+  Paste a YouTube URL, choose a start and end time, and download just that
+  clip. The server fetches the selected range instead of the whole video.
+
+
+  Clips are sent straight to your browser. Nothing is kept after the download
+  finishes. Saving a clip to Google Drive needs Google OAuth credentials,
+  which this package does not include.
+developer: Watchers
+website: https://yt-cut-and-splice-cyan.vercel.app
+submitter: Watchers
+submission: https://github.com/koko1111/YT-Cut-and-Splice
+repo: https://github.com/koko1111/YT-Cut-and-Splice
+support: https://github.com/koko1111/YT-Cut-and-Splice/issues
+gallery:
+  - https://raw.githubusercontent.com/koko1111/watchersvault-store/master/watchersvault-yt-cut-and-splice/icon.svg
+releaseNotes: >-
+  First Watchers Vault release. The app is installed from a public container
+  image.
+dependencies: []
+path: ""
+defaultUsername: ""
+defaultPassword: ""

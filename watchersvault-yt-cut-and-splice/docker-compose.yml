@@ -1,0 +1,18 @@
+version: "3.7"
+
+services:
+  app_proxy:
+    environment:
+      APP_HOST: watchersvault-yt-cut-and-splice_server_1
+      APP_PORT: 5000
+
+  server:
+    image: ghcr.io/koko1111/yt-cut-and-splice:edd2126eb6b1a231035833d796771afc8bc11c28@sha256:cf5c53126df8c709be639bfc1d28b1ba8ac77b53f67a484acb418d00f0dc7e17
+    restart: on-failure
+    init: true
+    environment:
+      PORT: "5000"
+      MAX_CLIP_SECONDS: "0"
+      DOWNLOAD_TIMEOUT_SECONDS: "0"
+    volumes:
+      - ${APP_DATA_DIR}/tmp:/app/tmp

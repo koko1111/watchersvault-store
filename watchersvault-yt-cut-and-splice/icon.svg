@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="YT Cut and Splice">
+  <rect width="128" height="128" rx="28" fill="#141821"/>
+  <rect x="28" y="36" width="72" height="56" rx="8" fill="#222836" stroke="#7ee0c6" stroke-width="4"/>
+  <path d="M46 52h14v24H46zM68 52h14v24H68z" fill="#f4f7fb"/>
+  <path d="M22 78l18 16 8-10" fill="none" stroke="#ffb020" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M86 34l20 8-8 6" fill="none" stroke="#ffb020" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
