@@ -47,7 +47,7 @@ services:
       retries: 3
 
   server:
-    image: diegosouzapw/omniroute:3.8.53@sha256:b52a17661a1aff42ffb78f349f423e986dfc55b57274f28559f8387622ef8ee4
+    image: diegosouzapw/omniroute:latest
     restart: on-failure
     stop_grace_period: 40s
     environment:

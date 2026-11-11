@@ -29,8 +29,8 @@ support: https://github.com/cheaper-inference/OmniRoute/issues
 gallery:
   - https://raw.githubusercontent.com/koko1111/watchersvault-store/master/watchersvault-omniroute/icon.svg
 releaseNotes: >-
-  First Watchers Vault release. Packages OmniRoute 3.8.53 with Redis. API
-  requests require an OmniRoute API key.
+  Installs diegosouzapw/omniroute:latest with Redis, so a new install pulls
+  the current image. API requests require an OmniRoute API key.
 dependencies: []
 path: ""
 defaultUsername: ""
