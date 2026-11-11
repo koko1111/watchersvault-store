@@ -4,7 +4,7 @@ name: OmniRoute
 tagline: One endpoint for hundreds of AI models
 icon: https://raw.githubusercontent.com/koko1111/watchersvault-store/master/watchersvault-omniroute/icon.svg
 category: ai
-version: "3.8.55"
+version: "3.8.56"
 port: 20128
 description: >-
   OmniRoute is an OpenAI-compatible gateway for a large set of model
@@ -35,9 +35,11 @@ description: >-
   2. Create a reusable auth key.
 
   3. Update this app, then set NEXT_PUBLIC_BASE_URL to
-  https://omniroute.your-tailnet.ts.net, AUTH_COOKIE_SECURE to true,
-  TS_AUTHKEY to that key, and leave TS_HOSTNAME as omniroute unless you want
-  another name.
+  https://omniroute.your-tailnet.ts.net and AUTH_COOKIE_SECURE to true.
+  Leave TS_HOSTNAME as omniroute unless you want another name. Put the auth
+  key in the .env file in this app's data folder, beside settings.yml:
+  TS_AUTHKEY=tskey-auth-... That file is mode 600 and is not an Umbrel
+  setting. A key already saved in settings is moved there on update.
 
   4. Restart the app. That joins a separate tailnet node and serves it with
   Caddy. Tailnet peers can open that https address directly.
@@ -50,9 +52,9 @@ support: https://github.com/cheaper-inference/OmniRoute/issues
 gallery:
   - https://raw.githubusercontent.com/koko1111/watchersvault-store/master/watchersvault-omniroute/icon.svg
 releaseNotes: >-
-  Optional Tailscale HTTPS stays off until you set it. The app description
-  lists the four setup steps. Leave the public address and auth key blank to
-  keep the Umbrel address only.
+  The Tailscale auth key is read from the app data .env file. A key saved in
+  Umbrel settings is moved there and removed from settings.yml. Leave that
+  file blank to keep the Umbrel address only.
 dependencies: []
 path: ""
 defaultUsername: ""
@@ -83,14 +85,6 @@ environment:
       - "false"
       - "true"
     note: Set true when the public address is https. Leave false for the Umbrel HTTP address.
-  - name: TS_AUTHKEY
-    services:
-      - ts
-    default: ""
-    note: >-
-      Optional reusable Tailscale auth key for a separate OmniRoute node.
-      Leave blank to keep Tailscale HTTPS off. After the first login the saved
-      node state is enough.
   - name: TS_HOSTNAME
     services:
       - ts

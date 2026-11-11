@@ -16,12 +16,233 @@ services:
       - sh
       - -c
       - |
-        mkdir -p /mnt/data /mnt/redis
+        set -eu
+
+        app=/mnt/app
+        envfile="$$app/.env"
+        settings="$$app/settings.yml"
+        override="$$app/docker-compose.umbrel-user-settings.yml"
+        runtime=/mnt/tailscale/.env
+
+        mkdir -p /mnt/data /mnt/redis /mnt/tailscale "$$app"
         chown -R 1000:1000 /mnt/data
         chown -R 999:1000 /mnt/redis
+
+        (
+        set -eu
+        umask 077
+        if [ ! -f "$$envfile" ]; then
+          printf '%s\n' '# Optional Tailscale auth key. This file is not Umbrel settings.' 'TS_AUTHKEY=' > "$$envfile"
+        fi
+
+        unquote() {
+          v=$$1
+          case $$v in
+            \'*\')
+              v=$${v#\'}
+              v=$${v%\'}
+              printf '%s' "$$v" | sed "s/''/'/g"
+              ;;
+            \"*\")
+              v=$${v#\"}
+              v=$${v%\"}
+              printf '%s' "$$v" | sed 's/\\"/"/g; s/\\\\/\\/g'
+              ;;
+            *)
+              printf '%s' "$$v"
+              ;;
+          esac
+        }
+
+        read_env() {
+          found=
+          while IFS= read -r line || [ -n "$$line" ]; do
+            line=$$(printf '%s' "$$line" | tr -d '\r')
+            trim=$$line
+            while :; do
+              case $$trim in
+                [[:space:]]*) trim=$${trim#?} ;;
+                *) break ;;
+              esac
+            done
+            case $$trim in
+              TS_AUTHKEY=*)
+                found=$$(unquote "$${trim#TS_AUTHKEY=}")
+                ;;
+            esac
+          done < "$$1"
+          printf '%s' "$$found"
+        }
+
+        # Drop TS_AUTHKEY list items from Umbrel's settings.yml. Print the first value.
+        extract_settings() {
+          section=
+          item=
+          extracted=
+          removed=0
+          out=$$(mktemp)
+          : > "$$out"
+          flush() {
+            if [ -z "$$item" ]; then
+              return
+            fi
+            name=$$(printf '%s\n' "$$item" | sed -n 's/^  - name: //p; s/^    name: //p' | head -n 1)
+            value=$$(printf '%s\n' "$$item" | sed -n 's/^    value: //p' | head -n 1)
+            case $$section in
+              environment|customEnvironment)
+                if [ "$$name" = "TS_AUTHKEY" ]; then
+                  case $$value in
+                    '|'|'>'|'|'*|'>'*)
+                      printf '%s' "$$item" >> "$$out"
+                      ;;
+                    *)
+                      if [ -z "$$extracted" ] && [ -n "$$value" ]; then
+                        extracted=$$(unquote "$$value")
+                      fi
+                      removed=1
+                      ;;
+                  esac
+                  item=
+                  return
+                fi
+                ;;
+            esac
+            printf '%s' "$$item" >> "$$out"
+            item=
+          }
+          while IFS= read -r line || [ -n "$$line" ]; do
+            case $$line in
+              [![:space:]#]*)
+                flush
+                key=$${line%%:*}
+                case $$key in
+                  environment|customEnvironment) section=$$key ;;
+                  *) section= ;;
+                esac
+                printf '%s\n' "$$line" >> "$$out"
+                ;;
+              '  - '*)
+                if [ -n "$$section" ]; then
+                  flush
+                  item="$$line
+        "
+                else
+                  flush
+                  printf '%s\n' "$$line" >> "$$out"
+                fi
+                ;;
+              '    '*|'')
+                if [ -n "$$item" ]; then
+                  item="$$item$$line
+        "
+                else
+                  printf '%s\n' "$$line" >> "$$out"
+                fi
+                ;;
+              *)
+                flush
+                printf '%s\n' "$$line" >> "$$out"
+                ;;
+            esac
+          done < "$$1"
+          flush
+          if [ "$$removed" -eq 1 ]; then
+            cat "$$out" > "$$1"
+            echo "Removed TS_AUTHKEY from Umbrel settings." >&2
+          fi
+          rm -f "$$out"
+          printf '%s' "$$extracted"
+        }
+
+        current=$$(read_env "$$envfile")
+        moved=
+        if [ -f "$$settings" ]; then
+          moved=$$(extract_settings "$$settings")
+        fi
+
+        if [ -f "$$override" ]; then
+          override_key=$$(sed -n 's/^[[:space:]]*TS_AUTHKEY:[[:space:]]*//p' "$$override" | head -n 1)
+          if [ -n "$$override_key" ]; then
+            override_key=$$(unquote "$$override_key")
+            if [ -z "$$moved" ]; then
+              moved=$$override_key
+            fi
+            tmp=$$(mktemp)
+            cleaned=$$(mktemp)
+            sed '/^[[:space:]]*TS_AUTHKEY:[[:space:]]*/d' "$$override" > "$$tmp"
+            drop_empty='
+              function indent(s, i) {
+                i = 1
+                while (i <= length(s) && substr(s, i, 1) == " ") i++
+                if (i > length(s)) return -1
+                return i - 1
+              }
+              { line[NR] = $$0 }
+              END {
+                for (i = 1; i <= NR; i++) {
+                  s = line[i]
+                  if (substr(s, length(s), 1) == ":" && substr(s, 1, 1) != "#") {
+                    ind = indent(s)
+                    j = i + 1
+                    while (j <= NR && indent(line[j]) < 0) j++
+                    if (j <= NR && indent(line[j]) > ind) print s
+                    continue
+                  }
+                  print s
+                }
+              }
+            '
+            awk "$$drop_empty" "$$tmp" > "$$cleaned"
+            awk "$$drop_empty" "$$cleaned" > "$$tmp"
+            cat "$$tmp" > "$$override"
+            rm -f "$$tmp" "$$cleaned"
+          fi
+        fi
+
+        if [ -n "$$moved" ] && [ -z "$$current" ]; then
+          case $$moved in
+            *[!A-Za-z0-9_-]*)
+              esc=$$(printf '%s' "$$moved" | sed 's/\\/\\\\/g; s/"/\\"/g')
+              line="TS_AUTHKEY=\"$$esc\""
+              ;;
+            *)
+              line="TS_AUTHKEY=$$moved"
+              ;;
+          esac
+          tmp=$$(mktemp)
+          replaced=0
+          while IFS= read -r row || [ -n "$$row" ]; do
+            case $$row in
+              TS_AUTHKEY=*|[[:space:]]*TS_AUTHKEY=*)
+                printf '%s\n' "$$line"
+                replaced=1
+                ;;
+              *)
+                printf '%s\n' "$$row"
+                ;;
+            esac
+          done < "$$envfile" > "$$tmp"
+          if [ "$$replaced" -eq 0 ]; then
+            printf '%s\n' "$$line" >> "$$tmp"
+          fi
+          cat "$$tmp" > "$$envfile"
+          rm -f "$$tmp"
+          echo "Stored the Tailscale auth key in .env."
+        elif [ -n "$$moved" ]; then
+          echo "Kept the existing .env auth key and removed the settings copy."
+        fi
+
+        owner=$$(stat -c '%u:%g' "$$app")
+        chown "$$owner" "$$envfile"
+        chmod 600 "$$envfile"
+        cp "$$envfile" "$$runtime"
+        chmod 600 "$$runtime"
+        ) || echo "Tailscale auth key was left unchanged."
     volumes:
       - ${APP_DATA_DIR}/data:/mnt/data
       - ${APP_DATA_DIR}/redis:/mnt/redis
+      - ${APP_DATA_DIR}:/mnt/app
+      - ${APP_DATA_DIR}/tailscale:/mnt/tailscale
 
   redis:
     image: redis:8.6.5-alpine@sha256:cd218f4b106a332c5c992e38a9480bfb9d7e9f8f7b0ec9a0023bfa36d9a408f9
@@ -73,8 +294,8 @@ services:
       retries: 3
       start_period: 20s
 
-  # Separate tailnet node used only when TS_AUTHKEY is set. It does not replace
-  # the Umbrel Tailscale app, and it does not listen on the host's ports.
+  # Separate tailnet node used only when .env contains an auth key. It does not
+  # replace the Umbrel Tailscale app, and it does not listen on the host's ports.
   ts:
     image: tailscale/tailscale:v1.104.4@sha256:ed6480b33c6eb67c9cbd203ed42b9fb57e361986725b6856def71b7a3d9e276c
     restart: on-failure
@@ -90,10 +311,39 @@ services:
     volumes:
       - ${APP_DATA_DIR}/tailscale:/var/lib/tailscale
       - ts-run:/var/run/tailscale
+    depends_on:
+      setup:
+        condition: service_completed_successfully
     entrypoint: ["/bin/sh", "-c"]
     command:
       - |
-        if [ -z "$$TS_AUTHKEY" ] && [ ! -s /var/lib/tailscale/tailscaled.state ]; then
+        auth=
+        if [ -f /var/lib/tailscale/.env ]; then
+          while IFS= read -r line || [ -n "$$line" ]; do
+            trim=$$line
+            while :; do
+              case $$trim in
+                [[:space:]]*) trim=$${trim#?} ;;
+                *) break ;;
+              esac
+            done
+            case $$trim in
+              TS_AUTHKEY=*)
+                auth=$${trim#TS_AUTHKEY=}
+                case $$auth in
+                  \"*\") auth=$${auth#\"}; auth=$${auth%\"} ;;
+                  \'*\') auth=$${auth#\'}; auth=$${auth%\'} ;;
+                esac
+                ;;
+            esac
+          done < /var/lib/tailscale/.env
+        fi
+        unset TS_AUTHKEY
+        if [ -n "$$auth" ]; then
+          export TS_AUTHKEY="$$auth"
+        fi
+        unset auth
+        if [ -z "$${TS_AUTHKEY:-}" ] && [ ! -s /var/lib/tailscale/tailscaled.state ]; then
           echo "Tailscale HTTPS is off."
           exec sleep infinity
         fi
