@@ -57,6 +57,8 @@ services:
       PORT: "20128"
       REQUIRE_API_KEY: "true"
       OMNIROUTE_MEMORY_MB: "4096"
+      # Internal address for scheduled jobs. The browser-facing origin is optional.
+      BASE_URL: http://watchersvault-omniroute_server_1:20128
     volumes:
       - ${APP_DATA_DIR}/data:/app/data
     depends_on:
@@ -70,3 +72,65 @@ services:
       timeout: 5s
       retries: 3
       start_period: 20s
+
+  # Separate tailnet node used only when TS_AUTHKEY is set. It does not replace
+  # the Umbrel Tailscale app, and it does not listen on the host's ports.
+  ts:
+    image: tailscale/tailscale:v1.104.4@sha256:ed6480b33c6eb67c9cbd203ed42b9fb57e361986725b6856def71b7a3d9e276c
+    restart: on-failure
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    environment:
+      TS_STATE_DIR: /var/lib/tailscale
+      TS_SOCKET: /var/run/tailscale/tailscaled.sock
+      TS_USERSPACE: "false"
+    volumes:
+      - ${APP_DATA_DIR}/tailscale:/var/lib/tailscale
+      - ts-run:/var/run/tailscale
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        if [ -z "$$TS_AUTHKEY" ] && [ ! -s /var/lib/tailscale/tailscaled.state ]; then
+          echo "Tailscale HTTPS is off."
+          exec sleep infinity
+        fi
+        export TS_HOSTNAME="$${TS_HOSTNAME:-omniroute}"
+        exec /usr/local/bin/containerboot
+
+  # HTTPS for a *.ts.net name. Caddy asks the sidecar's Tailscale daemon for
+  # the certificate. With no public URL, this process waits and binds nothing.
+  caddy:
+    image: caddy:2.10.2-alpine@sha256:4c6e91c6ed0e2fa03efd5b44747b625fec79bc9cd06ac5235a779726618e530d
+    restart: on-failure
+    network_mode: service:ts
+    depends_on:
+      - ts
+      - server
+    volumes:
+      - ts-run:/var/run/tailscale
+      - ${APP_DATA_DIR}/caddy:/data
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        raw="$$NEXT_PUBLIC_BASE_URL"
+        host="$${raw#https://}"
+        host="$${host#http://}"
+        host="$${host%%/*}"
+        if [ -z "$$host" ]; then
+          echo "Public HTTPS is off."
+          exec sleep infinity
+        fi
+        mkdir -p /etc/caddy
+        printf '%s {\n\treverse_proxy watchersvault-omniroute_server_1:20128\n}\n' "$$host" > /etc/caddy/Caddyfile
+        i=0
+        while [ "$$i" -lt 30 ] && [ ! -S /var/run/tailscale/tailscaled.sock ]; do
+          i=$$((i + 1))
+          sleep 2
+        done
+        exec caddy run --config /etc/caddy/Caddyfile --adapter caddyfile
+
+volumes:
+  ts-run:

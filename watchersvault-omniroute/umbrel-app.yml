@@ -4,7 +4,7 @@ name: OmniRoute
 tagline: One endpoint for hundreds of AI models
 icon: https://raw.githubusercontent.com/koko1111/watchersvault-store/master/watchersvault-omniroute/icon.svg
 category: ai
-version: "3.8.53"
+version: "3.8.54"
 port: 20128
 description: >-
   OmniRoute is an OpenAI-compatible gateway for a large set of model
@@ -20,6 +20,16 @@ description: >-
   The Node heap is 4096 MB, which is enough for one coding client. Change
   OMNIROUTE_MEMORY_MB in the app settings for a heavier agent, or lower it
   on a small Umbrel. The live websocket on port 20132 is not exposed.
+
+
+  Tailscale HTTPS is optional. Leave the public address and auth key blank to
+  keep using the Umbrel address. To turn it on, enable HTTPS and MagicDNS in
+  the Tailscale admin console, then set the public address, secure cookies,
+  and a reusable auth key in this app's settings and restart. That joins a
+  separate tailnet node named for OmniRoute and serves it with Caddy. It does
+  not open ports 80 or 443 on the Umbrel, and it does not replace the Umbrel
+  Tailscale app. The tailnet address is protected by OmniRoute's own password
+  and API keys.
 developer: cheaper-inference
 website: https://github.com/cheaper-inference/OmniRoute
 submitter: Watchers
@@ -29,8 +39,9 @@ support: https://github.com/cheaper-inference/OmniRoute/issues
 gallery:
   - https://raw.githubusercontent.com/koko1111/watchersvault-store/master/watchersvault-omniroute/icon.svg
 releaseNotes: >-
-  Installs diegosouzapw/omniroute:latest with Redis, so a new install pulls
-  the current image. API requests require an OmniRoute API key.
+  Adds optional Tailscale HTTPS through Caddy. Leave the public address and
+  auth key blank to keep the Umbrel address only. The container image remains
+  diegosouzapw/omniroute:latest.
 dependencies: []
 path: ""
 defaultUsername: ""
@@ -44,3 +55,35 @@ environment:
       Node heap in megabytes. 1024 is enough for the dashboard. 4096 suits
       one coding client. Use 8192 or more for a heavy agent, and keep the
       Umbrel's free RAM above that heap.
+  - name: NEXT_PUBLIC_BASE_URL
+    services:
+      - server
+      - caddy
+    default: ""
+    note: >-
+      Optional Tailscale HTTPS address, such as
+      https://omniroute.your-tailnet.ts.net. Leave blank to use Umbrel only.
+      Enable HTTPS and MagicDNS in the Tailscale admin console first.
+  - name: AUTH_COOKIE_SECURE
+    services:
+      - server
+    default: "false"
+    options:
+      - "false"
+      - "true"
+    note: Set true when the public address is https. Leave false for the Umbrel HTTP address.
+  - name: TS_AUTHKEY
+    services:
+      - ts
+    default: ""
+    note: >-
+      Optional reusable Tailscale auth key for a separate OmniRoute node.
+      Leave blank to keep Tailscale HTTPS off. After the first login the saved
+      node state is enough.
+  - name: TS_HOSTNAME
+    services:
+      - ts
+    default: omniroute
+    note: >-
+      Machine name of the OmniRoute tailnet node. The public address must use
+      this name plus your tailnet DNS suffix.
