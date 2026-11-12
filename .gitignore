@@ -1,1 +1,58 @@
+# macOS and editor junk
 .DS_Store
+Thumbs.db
+desktop.ini
+*.swp
+*~
+
+# Python bytecode from local checks
+__pycache__/
+*.py[cod]
+
+# Environment files and auth material. Real keys stay on the Umbrel, not in git.
+.env
+.env.*
+!.env.example
+*.env
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+id_rsa
+id_rsa.pub
+id_ed25519
+id_ed25519.pub
+id_dsa
+id_dsa.pub
+*.token
+*.secret
+*.secrets
+auth.json
+credentials
+credentials.*
+secrets.json
+secrets.yml
+secrets.yaml
+service-account*.json
+serviceAccount*.json
+**/settings.yml
+
+# Tailscale node state and saved tailnet notes
+tailscaled.state
+*.tailscale
+*.ts.net
+tskey*
+
+# Contact and mailbox exports, which carry names and email addresses
+*.vcf
+*.mbox
+contacts.csv
+contacts.json
+address-book*
+
+# Runtime copies of Umbrel app data, if they are ever placed in this repo
+watchersvault-*/data/**
+!watchersvault-*/data/**/
+!watchersvault-*/data/**/.gitkeep

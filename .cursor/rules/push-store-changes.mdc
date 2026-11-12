@@ -1,0 +1,10 @@
+---
+description: Push Watchers Vault store changes before expecting them on Umbrel
+alwaysApply: true
+---
+
+# Watchers Vault store updates
+
+Umbrel installs this store from GitHub (`koko1111/watchersvault-store`). A local edit does not appear in the store until it is committed and pushed.
+
+When a change is meant to show up or install on the Umbrel, commit the relevant files and push to the store remote before checking the App Store or installing the app. Leave the commit unpushed only when the user asked to keep it local.

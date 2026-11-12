@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="LiveSync">
+  <rect width="128" height="128" rx="28" fill="#12141a"/>
+  <rect x="24" y="30" width="36" height="46" rx="8" fill="none" stroke="#e7e9ee" stroke-width="6"/>
+  <rect x="68" y="52" width="36" height="46" rx="8" fill="none" stroke="#7ee0c6" stroke-width="6"/>
+  <path d="M60 48h12M56 64h16" fill="none" stroke="#e7e9ee" stroke-width="6" stroke-linecap="round"/>
+  <path d="M70 61l6 6-6 6" fill="none" stroke="#7ee0c6" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
