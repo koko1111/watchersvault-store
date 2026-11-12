@@ -28,10 +28,10 @@ Leave the public address blank, and leave `TS_AUTHKEY` empty in the app data `.e
 
 ## Optional LiveSync Tailscale HTTPS
 
-Leave the address and `TS_AUTHKEY` empty in the app data `.env` to keep CouchDB off the network. This does not open ports 80 or 443, and it does not replace the Umbrel Tailscale app. Umbrel environment settings are not used for the address, hostname, or auth key.
+Leave `LIVESYNC_URL` blank, and leave `TS_AUTHKEY` empty in the app data `.env`, to keep CouchDB off the network. This does not open ports 80 or 443, and it does not replace the Umbrel Tailscale app. Umbrel does not need the auth key in `settings.yml`.
 
 1. In the Tailscale admin console, enable HTTPS certificates and MagicDNS.
 2. Create a reusable auth key.
-3. Open LiveSync from the Umbrel home screen. Save the HTTPS address, hostname, and auth key there. The address looks like `https://livesync.your-tailnet.ts.net`. The hostname is the first label, `livesync`, unless you choose another name.
-4. Restart the app. The values are stored in `.env` beside `settings.yml`. The file is mode 600.
-5. In the `test` vault, run Self-hosted LiveSync Quick Setup with database name `test`. The username is `livesync`. The password is the one Umbrel shows for the app.
+3. In the LiveSync app settings, set `LIVESYNC_URL` to `https://livesync.your-tailnet.ts.net`. Leave `TS_HOSTNAME` as `livesync` unless you want another name.
+4. Put `TS_AUTHKEY=tskey-auth-...` in `.env` beside `settings.yml`. The file is mode 600.
+5. Restart the app. In the `test` vault, run Self-hosted LiveSync Quick Setup with database name `test`. The username is `livesync`. The password is the one Umbrel shows for the app.

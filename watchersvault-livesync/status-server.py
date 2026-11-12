@@ -155,8 +155,7 @@ def page(message="", error=""):
     databases = env.get("COUCHDB_DATABASES", "test") or "test"
     key = env.get("TS_AUTHKEY", "")
     key_state = "Saved" if key else "Not set"
-    public_url = env.get("LIVESYNC_URL", "").strip() or os.environ.get("LIVESYNC_URL", "").strip()
-    hostname = env.get("TS_HOSTNAME", "").strip() or os.environ.get("TS_HOSTNAME", "").strip() or "livesync"
+    public_url = os.environ.get("LIVESYNC_URL", "").strip()
     up_code, up_body = couch_request("/_up")
     couch_ok = up_code == 200 and '"ok"' in up_body
     db_code, db_body = couch_request("/_all_dbs") if couch_ok else (0, "")
@@ -250,10 +249,6 @@ def page(message="", error=""):
   <div class="card">
     <p class="status">Saved address: <code>{html.escape(public)}</code>. Auth key: {html.escape(key_state)}.</p>
     <form method="post" action="/">
-      <label for="livesync_url">Tailscale HTTPS address</label>
-      <input id="livesync_url" name="livesync_url" type="text" value="{html.escape(public_url, quote=True)}" placeholder="https://livesync.your-tailnet.ts.net" autocomplete="off">
-      <label for="ts_hostname">Tailscale hostname</label>
-      <input id="ts_hostname" name="ts_hostname" type="text" value="{html.escape(hostname, quote=True)}" autocomplete="off">
       <label for="ts_authkey">Tailscale auth key</label>
       <input id="ts_authkey" name="ts_authkey" type="password" autocomplete="off" placeholder="tskey-auth-...">
       <label for="databases">Database names</label>
@@ -261,7 +256,7 @@ def page(message="", error=""):
       <button type="submit" name="action" value="save">Save</button>
       <button type="submit" name="action" value="clear">Remove auth key</button>
     </form>
-    <p>Leave the key blank to keep the saved key. The hostname must be the name in the address. Save, then restart the app. These values are written to <code>.env</code> beside <code>settings.yml</code>, mode 600. Umbrel settings are not used.</p>
+    <p>The address and hostname are Umbrel environment variables. The auth key is not. Put <code>TS_AUTHKEY=tskey-auth-...</code> in <code>.env</code> beside <code>settings.yml</code>, or save it here. Leave the key blank to keep the saved key. Restart the app after either change.</p>
   </div>
   <h2>Server</h2>
   <div class="card">
@@ -303,12 +298,6 @@ class Handler(BaseHTTPRequestHandler):
         except ValueError as exc:
             self._html(page(error=str(exc)), status=400)
             return
-        try:
-            public_url = parse_url((form.get("livesync_url") or [""])[0])
-            hostname = parse_hostname((form.get("ts_hostname") or [""])[0])
-        except ValueError as exc:
-            self._html(page(error=str(exc)), status=400)
-            return
         current = read_env(ENV_PATH)
         key = current.get("TS_AUTHKEY", "")
         if action == "clear":
@@ -322,8 +311,6 @@ class Handler(BaseHTTPRequestHandler):
                 key = submitted
         updates = {
             "TS_AUTHKEY": key,
-            "TS_HOSTNAME": hostname,
-            "LIVESYNC_URL": public_url,
             "COUCHDB_DATABASES": ",".join(databases),
         }
         write_env(ENV_PATH, updates)
