@@ -15,8 +15,8 @@ TS_ENV_PATH = os.environ.get("TS_ENV", "/mnt/app/data/tailscale/.env")
 COUCH_URL = os.environ.get("COUCHDB_URL", "http://couchdb:5984").rstrip("/")
 COUCH_USER = os.environ.get("COUCHDB_USER", "livesync")
 COUCH_PASSWORD = os.environ.get("COUCHDB_PASSWORD", "")
-PUBLIC_URL = os.environ.get("LIVESYNC_URL", "").strip()
-TS_HOSTNAME = os.environ.get("TS_HOSTNAME", "livesync").strip() or "livesync"
+HOST_NAME = re.compile(r"^[A-Za-z0-9-]+$")
+URL_HOST = re.compile(r"^[A-Za-z0-9.-]+\.ts\.net$")
 VAULTS_PATH = os.environ.get("VAULTS_PATH", "/vaults")
 BIND = os.environ.get("LIVESYNC_BIND", "0.0.0.0")
 PORT = int(os.environ.get("LIVESYNC_PORT", "8080"))
@@ -80,6 +80,30 @@ def write_env(path, updates):
     os.replace(temporary, path)
 
 
+def parse_url(raw):
+    raw = raw.strip()
+    if not raw:
+        return ""
+    if "\n" in raw or "\r" in raw or len(raw) > 200:
+        raise ValueError("The address is not valid.")
+    host = raw
+    for prefix in ("https://", "http://"):
+        if host.startswith(prefix):
+            host = host[len(prefix) :]
+            break
+    host = host.split("/", 1)[0].split(":", 1)[0]
+    if not URL_HOST.match(host):
+        raise ValueError("Use an https://name.tailnet.ts.net address.")
+    return "https://" + host
+
+
+def parse_hostname(raw):
+    raw = (raw or "").strip() or "livesync"
+    if "\n" in raw or "\r" in raw or not HOST_NAME.match(raw):
+        raise ValueError("Hostname must use letters, numbers, and hyphens.")
+    return raw
+
+
 def parse_databases(raw):
     names = []
     for part in raw.split(","):
@@ -131,6 +155,8 @@ def page(message="", error=""):
     databases = env.get("COUCHDB_DATABASES", "test") or "test"
     key = env.get("TS_AUTHKEY", "")
     key_state = "Saved" if key else "Not set"
+    public_url = env.get("LIVESYNC_URL", "").strip() or os.environ.get("LIVESYNC_URL", "").strip()
+    hostname = env.get("TS_HOSTNAME", "").strip() or os.environ.get("TS_HOSTNAME", "").strip() or "livesync"
     up_code, up_body = couch_request("/_up")
     couch_ok = up_code == 200 and '"ok"' in up_body
     db_code, db_body = couch_request("/_all_dbs") if couch_ok else (0, "")
@@ -139,8 +165,8 @@ def page(message="", error=""):
         remote_dbs = re.findall(r'"([^"]+)"', db_body)
         remote_dbs = [name for name in remote_dbs if not name.startswith("_")]
     vaults = vault_names()
-    public = PUBLIC_URL or "Not set. Add LIVESYNC_URL in the Umbrel app settings."
-    uri = PUBLIC_URL if PUBLIC_URL.startswith("https://") else "https://livesync.your-tailnet.ts.net"
+    public = public_url or "Not set"
+    uri = public_url if public_url.startswith("https://") else "https://livesync.your-tailnet.ts.net"
 
     def row(label, value):
         return (
@@ -222,9 +248,12 @@ def page(message="", error=""):
   <p>Install Self-hosted LiveSync in the test vault and run Quick Setup with those values. Turn on end-to-end encryption. The passphrase stays on your devices. This server does not store it. Leave Obsidian Sync and any other sync plugin off for this vault.</p>
   <h2>Tailscale</h2>
   <div class="card">
-    <p class="status">Public address: <code>{html.escape(public)}</code></p>
-    <p class="status">Auth key: {html.escape(key_state)}. Hostname <code>{html.escape(TS_HOSTNAME)}</code> must be the name in that address.</p>
+    <p class="status">Saved address: <code>{html.escape(public)}</code>. Auth key: {html.escape(key_state)}.</p>
     <form method="post" action="/">
+      <label for="livesync_url">Tailscale HTTPS address</label>
+      <input id="livesync_url" name="livesync_url" type="text" value="{html.escape(public_url, quote=True)}" placeholder="https://livesync.your-tailnet.ts.net" autocomplete="off">
+      <label for="ts_hostname">Tailscale hostname</label>
+      <input id="ts_hostname" name="ts_hostname" type="text" value="{html.escape(hostname, quote=True)}" autocomplete="off">
       <label for="ts_authkey">Tailscale auth key</label>
       <input id="ts_authkey" name="ts_authkey" type="password" autocomplete="off" placeholder="tskey-auth-...">
       <label for="databases">Database names</label>
@@ -232,7 +261,7 @@ def page(message="", error=""):
       <button type="submit" name="action" value="save">Save</button>
       <button type="submit" name="action" value="clear">Remove auth key</button>
     </form>
-    <p>Leave the key blank to keep the saved key. Restart the app after saving the key or changing LIVESYNC_URL. The key is written to <code>.env</code> beside <code>settings.yml</code>, mode 600.</p>
+    <p>Leave the key blank to keep the saved key. The hostname must be the name in the address. Save, then restart the app. These values are written to <code>.env</code> beside <code>settings.yml</code>, mode 600. Umbrel settings are not used.</p>
   </div>
   <h2>Server</h2>
   <div class="card">
@@ -274,6 +303,12 @@ class Handler(BaseHTTPRequestHandler):
         except ValueError as exc:
             self._html(page(error=str(exc)), status=400)
             return
+        try:
+            public_url = parse_url((form.get("livesync_url") or [""])[0])
+            hostname = parse_hostname((form.get("ts_hostname") or [""])[0])
+        except ValueError as exc:
+            self._html(page(error=str(exc)), status=400)
+            return
         current = read_env(ENV_PATH)
         key = current.get("TS_AUTHKEY", "")
         if action == "clear":
@@ -287,6 +322,8 @@ class Handler(BaseHTTPRequestHandler):
                 key = submitted
         updates = {
             "TS_AUTHKEY": key,
+            "TS_HOSTNAME": hostname,
+            "LIVESYNC_URL": public_url,
             "COUCHDB_DATABASES": ",".join(databases),
         }
         write_env(ENV_PATH, updates)
@@ -325,6 +362,14 @@ def self_test():
         assert values["COUCHDB_DATABASES"] == "test,notes"
         assert os.stat(path).st_mode & 0o777 == 0o600
         assert parse_databases(" test, Notes ") == ["test", "notes"]
+        assert parse_url("https://livesync.example.ts.net/extra") == "https://livesync.example.ts.net"
+        assert parse_hostname("") == "livesync"
+        try:
+            parse_url("https://example.com")
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("non-tailscale address was accepted")
         try:
             parse_databases("_users")
         except ValueError:
