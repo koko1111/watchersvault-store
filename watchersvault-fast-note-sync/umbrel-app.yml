@@ -1,0 +1,45 @@
+manifestVersion: 1
+id: watchersvault-fast-note-sync
+name: Fast Note Sync
+tagline: Sync server for the Obsidian Fast Note Sync plugin
+icon: https://raw.githubusercontent.com/koko1111/watchersvault-store/master/watchersvault-fast-note-sync/icon.svg
+category: files
+version: "1.0.0"
+port: 19000
+description: >-
+  Server for the Obsidian Fast Note Sync plugin. Notes are stored in this
+  app's data folder. They are not end-to-end encrypted. The plugin uploads
+  the vault from the device that already has the notes. This server does not
+  read documents/obsidian/test by itself.
+
+
+  The service is on this app's Umbrel port. Devices that are already on the
+  Umbrel Tailscale network open it over HTTP. There is no extra Tailscale
+  node and no certificate. Umbrel login is off so the plugin can connect.
+
+
+  Open http://<this-umbrel-tailscale-ip>:19000, register, and click Copy API
+  Config. Paste that into the Fast Note Sync plugin in the test vault. Open
+  the page at the address you want the plugin to use. Copying it from
+  umbrel.local stores that name in the config. A phone may reject HTTP to a
+  .ts.net name. Use the tailnet IP. Leave Obsidian Sync off.
+
+
+  After the first account exists, turn registration off in the admin
+  settings. The first vault to sync is the one you connect. Add the other
+  vaults from their own plugin settings with the same copied config.
+developer: haierkeys
+website: https://github.com/haierkeys/obsidian-fast-note-sync
+submitter: Watchers
+submission: https://github.com/haierkeys/fast-note-sync-service
+repo: https://github.com/haierkeys/fast-note-sync-service
+support: https://github.com/haierkeys/fast-note-sync-service/issues
+gallery:
+  - https://raw.githubusercontent.com/koko1111/watchersvault-store/master/watchersvault-fast-note-sync/icon.svg
+releaseNotes: >-
+  First Watchers Vault release. Fast Note Sync Service 3.6.1 is served on
+  the Umbrel port over the existing Tailscale connection.
+dependencies: []
+path: ""
+defaultUsername: ""
+defaultPassword: ""

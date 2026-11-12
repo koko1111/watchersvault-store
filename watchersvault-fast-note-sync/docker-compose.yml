@@ -1,0 +1,28 @@
+version: "3.7"
+
+services:
+  app_proxy:
+    environment:
+      APP_HOST: watchersvault-fast-note-sync_server_1
+      APP_PORT: 9000
+      # The plugin and the service's own login cannot sit behind Umbrel login.
+      PROXY_AUTH_ADD: "false"
+
+  server:
+    image: haierkeys/fast-note-sync-service:3.6.1@sha256:15833f15e83cee05794c3fe6028c7e41fd36c787f0d651415cad556579fc379f
+    restart: on-failure
+    volumes:
+      - ${APP_DATA_DIR}/storage:/fast-note-sync/storage
+      - ${APP_DATA_DIR}/config:/fast-note-sync/config
+    healthcheck:
+      test:
+        - CMD
+        - curl
+        - -fsS
+        - --max-time
+        - "4"
+        - http://127.0.0.1:9000/api/webgui/config
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
