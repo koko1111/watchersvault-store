@@ -6,7 +6,7 @@ name: LiveSync
 tagline: CouchDB for the Obsidian LiveSync plugin
 icon: https://raw.githubusercontent.com/koko1111/watchersvault-store/master/watchersvault-livesync/icon.svg
 category: files
-version: "1.0.52"
+version: "1.0.53"
 port: 25984
 description: >-
   CouchDB for the Self-hosted LiveSync Obsidian plugin. The first database
@@ -44,8 +44,9 @@ support: https://github.com/vrtmrz/obsidian-livesync/issues
 gallery:
   - https://raw.githubusercontent.com/koko1111/watchersvault-store/master/watchersvault-livesync/icon.svg
 releaseNotes: >-
-  CouchDB is served on the Umbrel port over the existing Tailscale
-  connection. The extra Tailscale node, Caddy, and the auth key are gone.
+  The installer no longer fails while Umbrel rewrites the compose file.
+  CouchDB is still served on the Umbrel port over the existing Tailscale
+  connection.
 dependencies: []
 path: ""
 defaultUsername: livesync

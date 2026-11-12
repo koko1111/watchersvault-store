@@ -29,11 +29,12 @@ services:
         chown -R 5984:5984 "$$app/data/couchdb" "$$app/data/couchdb-etc"
         umask 077
         if [ ! -f "$$envfile" ]; then
-          printf '%s\n' \
-            '# Comma-separated CouchDB database names. One per vault.' \
-            'COUCHDB_DATABASES=test' > "$$envfile"
+          echo '# One CouchDB database per vault.' > "$$envfile"
+          echo 'COUCHDB_DATABASES=test' >> "$$envfile"
         fi
-        grep -q '^COUCHDB_DATABASES=' "$$envfile" || printf '\n%s\n' 'COUCHDB_DATABASES=test' >> "$$envfile"
+        if ! grep -q '^COUCHDB_DATABASES=' "$$envfile"; then
+          printf '%s\n' 'COUCHDB_DATABASES=test' >> "$$envfile"
+        fi
         owner=$$(stat -c '%u:%g' "$$app")
         chown "$$owner" "$$envfile"
         chmod 600 "$$envfile"
@@ -86,7 +87,7 @@ services:
     healthcheck:
       test:
         - CMD-SHELL
-        - curl -fsS --max-time 4 http://127.0.0.1:5984/_up | grep -q '"status":"ok"'
+        - curl -fsS --max-time 4 http://127.0.0.1:5984/_up
       interval: 5s
       timeout: 5s
       retries: 24
@@ -120,7 +121,11 @@ services:
         }
 
         url_encode() {
-          printf '%s' "$$1" | sed 's/%/%25/g; s/+/%2B/g; s/(/%28/g; s/)/%29/g; s/\$$/%24/g'
+          out=$$(printf '%s' "$$1" | sed 's/%/%25/g')
+          out=$$(printf '%s' "$$out" | sed 's/+/%2B/g')
+          out=$$(printf '%s' "$$out" | sed 's/(/%28/g')
+          out=$$(printf '%s' "$$out" | sed 's/)/%29/g')
+          printf '%s' "$$out" | sed 's/\$$/%24/g'
         }
 
         read_databases() {
@@ -183,18 +188,21 @@ services:
         EOF
 
         echo "==> Waiting for CouchDB at $${hostname}"
-        until curl -sf "$${hostname}/_up" 2>/dev/null | grep -q '"status":"ok"'; do
+        until curl -sf "$${hostname}/_up" >/dev/null; do
           sleep 2
         done
         echo "==> CouchDB is up"
 
         user_json=$$(json_escape "$$username")
         pass_json=$$(json_escape "$$password")
-        if curl -fsS -X POST "$${hostname}/_cluster_setup" \
-          -H "Content-Type: application/json" \
-          --netrc-file "$$netrc" \
-          -d "{\"action\":\"enable_single_node\",\"username\":\"$${user_json}\",\"password\":\"$${pass_json}\",\"bind_address\":\"0.0.0.0\",\"port\":5984,\"singlenode\":true}" \
-          >/dev/null
+        body=/tmp/livesync-cluster.json
+        printf '%s' '{"action":"enable_single_node",' > "$$body"
+        printf '%s' "\"username\":\"$$user_json\"," >> "$$body"
+        printf '%s' "\"password\":\"$$pass_json\"," >> "$$body"
+        printf '%s\n' '"bind_address":"0.0.0.0","port":5984,"singlenode":true}' >> "$$body"
+        url="$${hostname}/_cluster_setup"
+        hdr="Content-Type: application/json"
+        if curl -fsS -X POST "$$url" -H "$$hdr" --netrc-file "$$netrc" -d @"$$body"
         then
           echo "[OK] cluster_setup"
         else
@@ -209,8 +217,12 @@ services:
         put_config chttpd max_http_request_size '"4294967296"'
         put_config couchdb max_document_size '"50000000"'
         put_config cors credentials '"true"'
-        put_config cors origins '"app://obsidian.md,capacitor://localhost,http://localhost"'
-        put_config cors headers '"accept, authorization, content-type, origin, referer"'
+        o1="app://obsidian.md,capacitor://localhost"
+        o2="http://localhost"
+        put_config cors origins "\"$$o1,$$o2\""
+        h1="accept, authorization, content-type"
+        h2="origin, referer"
+        put_config cors headers "\"$$h1, $$h2\""
         put_config cors methods '"GET, PUT, POST, HEAD, DELETE"'
         put_config cors max_age '"3600"'
 
