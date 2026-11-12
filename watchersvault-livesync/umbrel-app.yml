@@ -2,21 +2,11 @@ manifestVersion: 1
 id: watchersvault-livesync
 storage:
   dataRoot: data
-folderAccess:
-  - id: obsidian-vaults
-    name: Obsidian vaults
-    note: >-
-      Choose documents/obsidian. The setup page lists the vault folders it
-      finds. The test database is created even before you choose a folder.
-    mounts:
-      - service: status
-        targetPath: /vaults
-        readOnly: true
 name: LiveSync
 tagline: CouchDB for the Obsidian LiveSync plugin
 icon: https://raw.githubusercontent.com/koko1111/watchersvault-store/master/watchersvault-livesync/icon.svg
 category: files
-version: "1.0.51"
+version: "1.0.52"
 port: 25984
 description: >-
   CouchDB for the Self-hosted LiveSync Obsidian plugin. The first database
@@ -24,44 +14,27 @@ description: >-
   that vault. This server does not read the notes itself.
 
 
-  Open this app for the username, password, and connection status. The
-  password is the one Umbrel shows for this app. Obsidian does not use this
-  Umbrel address. It uses the Tailscale HTTPS address.
+  CouchDB is on this app's Umbrel port. Devices that are already on the
+  Umbrel Tailscale network open it over HTTP. There is no extra Tailscale
+  node and no Caddy certificate. The password is the one Umbrel shows for
+  this app. The username is livesync.
 
 
-  Tailscale HTTPS is off until the address is set here and the auth key
-  is in the app data .env file. It does not open ports 80 or 443 on the
-  Umbrel, and it does not replace the Umbrel Tailscale app. CouchDB is
-  not published on the local network. The auth key is not an Umbrel
-  setting and is not stored in settings.yml.
+  In the test vault, install Self-hosted LiveSync. On Connection Method,
+  choose Configure a remote manually. Use CouchDB. From a tailnet device
+  the URI is http://<this-umbrel-tailscale-ip>:25984. From the local
+  network, use this Umbrel address and the same port. The database name
+  is test. Turn on end-to-end encryption and keep the passphrase. It is
+  not stored here. Leave Obsidian Sync off for that vault.
 
 
-  To turn Tailscale HTTPS on:
-
-
-  1. In the Tailscale admin console, enable HTTPS certificates and MagicDNS.
-
-
-  2. Create a reusable auth key.
-
-
-  3. Set LIVESYNC_URL to https://livesync.your-tailnet.ts.net. Leave
-  TS_HOSTNAME as livesync unless you want another name. The address must
-  use that name plus your tailnet DNS suffix.
-
-
-  4. Put TS_AUTHKEY=tskey-auth-... in the .env file in this app's data
-  folder, beside settings.yml. That file is mode 600.
-
-
-  5. Restart the app. In Obsidian, open the test vault, install Self-hosted
-  LiveSync, and run Quick Setup with database name test. Turn on
-  end-to-end encryption and keep the passphrase. It is not stored here.
-  Leave Obsidian Sync off for that vault.
+  A phone may reject HTTP to a .ts.net name. Use the tailnet IP. Desktop
+  can use either address.
 
 
   When the test vault is syncing, add one lowercase database name for each
-  other vault, save, and restart. Each vault uses its own database.
+  other vault to COUCHDB_DATABASES in the app data .env file and restart.
+  Each vault uses its own database.
 developer: vrtmrz
 website: https://github.com/vrtmrz/obsidian-livesync
 submitter: Watchers
@@ -71,28 +44,10 @@ support: https://github.com/vrtmrz/obsidian-livesync/issues
 gallery:
   - https://raw.githubusercontent.com/koko1111/watchersvault-store/master/watchersvault-livesync/icon.svg
 releaseNotes: >-
-  The Tailscale address and hostname are Umbrel environment variables
-  again. The auth key stays in the app data .env file and is not written
-  to settings.yml.
+  CouchDB is served on the Umbrel port over the existing Tailscale
+  connection. The extra Tailscale node, Caddy, and the auth key are gone.
 dependencies: []
 path: ""
 defaultUsername: livesync
 defaultPassword: ""
 deterministicPassword: true
-environment:
-  - name: LIVESYNC_URL
-    services:
-      - caddy
-      - status
-    default: ""
-    note: >-
-      Tailscale HTTPS address, such as https://livesync.your-tailnet.ts.net.
-      Leave blank until the auth key is in the app data .env file. Enable
-      HTTPS and MagicDNS in the Tailscale admin console first.
-  - name: TS_HOSTNAME
-    services:
-      - ts
-    default: livesync
-    note: >-
-      Machine name of this app's tailnet node. LIVESYNC_URL must use this
-      name plus your tailnet DNS suffix.

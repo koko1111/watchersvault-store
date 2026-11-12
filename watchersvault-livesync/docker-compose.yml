@@ -3,8 +3,10 @@ version: "3.7"
 services:
   app_proxy:
     environment:
-      APP_HOST: watchersvault-livesync_status_1
-      APP_PORT: "8080"
+      APP_HOST: watchersvault-livesync_couchdb_1
+      APP_PORT: "5984"
+      # Obsidian sends its own CouchDB login. Umbrel login cannot sit in front of it.
+      PROXY_AUTH_ADD: "false"
 
   setup:
     image: alpine:3.22@sha256:49340b346798875b5592e5d420241f2f9cfba5f47e62ebb1446a1b34734e898f
@@ -19,34 +21,22 @@ services:
         set -eu
         app=/mnt/app
         envfile="$$app/.env"
-        runtime="$$app/data/tailscale/.env"
         if [ -z "$${APP_PASSWORD:-}" ]; then
           echo "APP_PASSWORD is missing." >&2
           exit 1
         fi
-        mkdir -p "$$app/data/couchdb" "$$app/data/couchdb-etc" "$$app/data/caddy" "$$app/data/tailscale"
+        mkdir -p "$$app/data/couchdb" "$$app/data/couchdb-etc"
         chown -R 5984:5984 "$$app/data/couchdb" "$$app/data/couchdb-etc"
-        chmod 700 "$$app/data/caddy" "$$app/data/tailscale"
         umask 077
         if [ ! -f "$$envfile" ]; then
           printf '%s\n' \
-            '# Tailscale auth key. This file is not an Umbrel setting.' \
-            'TS_AUTHKEY=' \
-            'TS_HOSTNAME=livesync' \
-            'LIVESYNC_URL=' \
             '# Comma-separated CouchDB database names. One per vault.' \
             'COUCHDB_DATABASES=test' > "$$envfile"
         fi
-        grep -q '^TS_AUTHKEY=' "$$envfile" || printf '\n%s\n' 'TS_AUTHKEY=' >> "$$envfile"
-        grep -q '^TS_HOSTNAME=' "$$envfile" || printf '\n%s\n' 'TS_HOSTNAME=livesync' >> "$$envfile"
-        grep -q '^LIVESYNC_URL=' "$$envfile" || printf '\n%s\n' 'LIVESYNC_URL=' >> "$$envfile"
         grep -q '^COUCHDB_DATABASES=' "$$envfile" || printf '\n%s\n' 'COUCHDB_DATABASES=test' >> "$$envfile"
         owner=$$(stat -c '%u:%g' "$$app")
         chown "$$owner" "$$envfile"
         chmod 600 "$$envfile"
-        cp "$$envfile" "$$runtime"
-        chown "$$owner" "$$runtime"
-        chmod 600 "$$runtime"
         cat > "$$app/data/couchdb-etc/livesync.ini" << 'EOF'
         [couchdb]
         max_document_size = 50000000
@@ -96,7 +86,7 @@ services:
     healthcheck:
       test:
         - CMD-SHELL
-        - curl -fsS --max-time 4 --user "$$COUCHDB_USER:$$COUCHDB_PASSWORD" http://127.0.0.1:5984/_session | grep -q '"ok":true'
+        - curl -fsS --max-time 4 http://127.0.0.1:5984/_up | grep -q '"status":"ok"'
       interval: 5s
       timeout: 5s
       retries: 24
@@ -105,169 +95,164 @@ services:
   couchdb-init:
     image: couchdb:3.5.1@sha256:ccea1e8035bf7afd68336e24056a1ca9c1c46d7abe42da686322c0ac7218e5c2
     restart: on-failure
-    entrypoint: ["sh", "/couchdb-init.sh"]
+    entrypoint: ["sh", "-c"]
     environment:
       COUCHDB_INTERNAL_URL: http://watchersvault-livesync_couchdb_1:5984
       COUCHDB_USER: livesync
       COUCHDB_PASSWORD: ${APP_PASSWORD}
+      COUCHDB_DATABASES: test
       LIVESYNC_ENV: /mnt/app/.env
+    command:
+      - |
+        # Configure CouchDB for Self-hosted LiveSync and create one database per vault.
+        # Safe to run again after a restart.
+
+        set -eu
+
+        hostname="$${COUCHDB_INTERNAL_URL:-http://couchdb:5984}"
+        username="$${COUCHDB_USER:?COUCHDB_USER is required}"
+        password="$${COUCHDB_PASSWORD:?COUCHDB_PASSWORD is required}"
+        node="$${COUCHDB_NODE:-_local}"
+        envfile="$${LIVESYNC_ENV:-/mnt/app/.env}"
+
+        json_escape() {
+          printf '%s' "$$1" | sed 's/\\/\\\\/g; s/"/\\"/g'
+        }
+
+        url_encode() {
+          printf '%s' "$$1" | sed 's/%/%25/g; s/+/%2B/g; s/(/%28/g; s/)/%29/g; s/\$$/%24/g'
+        }
+
+        read_databases() {
+          found=
+          if [ -f "$$envfile" ]; then
+            while IFS= read -r line || [ -n "$$line" ]; do
+              line=$$(printf '%s' "$$line" | tr -d '\r')
+              trim=$$line
+              while :; do
+                case $$trim in
+                  [[:space:]]*) trim=$${trim#?} ;;
+                  *) break ;;
+                esac
+              done
+              case $$trim in
+                COUCHDB_DATABASES=*)
+                  found=$${trim#COUCHDB_DATABASES=}
+                  case $$found in
+                    \"*\") found=$${found#\"}; found=$${found%\"} ;;
+                    \'*\') found=$${found#\'}; found=$${found%\'} ;;
+                  esac
+                  ;;
+              esac
+            done < "$$envfile"
+          fi
+          if [ -z "$$found" ]; then
+            found=$${COUCHDB_DATABASES:-test}
+          fi
+          printf '%s' "$$found"
+        }
+
+        put_config() {
+          section=$$1
+          key=$$2
+          value=$$3
+          curl -fsS -X PUT "$${hostname}/_node/$${node}/_config/$${section}/$${key}" \
+            -H "Content-Type: application/json" \
+            --netrc-file "$$netrc" \
+            -d "$$value" >/dev/null
+          echo "[OK] $${section}/$${key}"
+        }
+
+        valid_database() {
+          case $$1 in
+            _*) return 1 ;;
+          esac
+          printf '%s' "$$1" | grep -Eq '^[a-z][a-z0-9_$$()+/-]*$$'
+        }
+
+        hostonly=$${hostname#*://}
+        hostonly=$${hostonly%%/*}
+        hostonly=$${hostonly%%:*}
+        netrc=$$(mktemp)
+        trap 'rm -f "$$netrc"' EXIT
+        umask 077
+        cat > "$$netrc" << EOF
+        machine $${hostonly}
+        login $${username}
+        password $${password}
+        EOF
+
+        echo "==> Waiting for CouchDB at $${hostname}"
+        until curl -sf "$${hostname}/_up" 2>/dev/null | grep -q '"status":"ok"'; do
+          sleep 2
+        done
+        echo "==> CouchDB is up"
+
+        user_json=$$(json_escape "$$username")
+        pass_json=$$(json_escape "$$password")
+        if curl -fsS -X POST "$${hostname}/_cluster_setup" \
+          -H "Content-Type: application/json" \
+          --netrc-file "$$netrc" \
+          -d "{\"action\":\"enable_single_node\",\"username\":\"$${user_json}\",\"password\":\"$${pass_json}\",\"bind_address\":\"0.0.0.0\",\"port\":5984,\"singlenode\":true}" \
+          >/dev/null
+        then
+          echo "[OK] cluster_setup"
+        else
+          echo "[OK] cluster already set up"
+        fi
+
+        put_config chttpd require_valid_user '"true"'
+        put_config chttpd_auth require_valid_user '"true"'
+        put_config httpd WWW-Authenticate '"Basic realm=\"couchdb\""'
+        put_config httpd enable_cors '"true"'
+        put_config chttpd enable_cors '"true"'
+        put_config chttpd max_http_request_size '"4294967296"'
+        put_config couchdb max_document_size '"50000000"'
+        put_config cors credentials '"true"'
+        put_config cors origins '"app://obsidian.md,capacitor://localhost,http://localhost"'
+        put_config cors headers '"accept, authorization, content-type, origin, referer"'
+        put_config cors methods '"GET, PUT, POST, HEAD, DELETE"'
+        put_config cors max_age '"3600"'
+
+        databases=$$(read_databases)
+        old_ifs=$$IFS
+        IFS=,
+        for raw in $$databases; do
+          db=$$(printf '%s' "$$raw" | tr -d '[:space:]')
+          if [ -z "$$db" ]; then
+            continue
+          fi
+          if ! valid_database "$$db"; then
+            echo "Invalid database name: $${db}" >&2
+            exit 1
+          fi
+          encoded=$$(url_encode "$$db")
+          code=$$(curl -sS -o /tmp/livesync-db-body -w "%{http_code}" \
+            -X PUT "$${hostname}/$${encoded}" \
+            --netrc-file "$$netrc" || true)
+          case $$code in
+            200|201|202)
+              echo "[OK] database $${db} created"
+              ;;
+            412)
+              echo "[OK] database $${db} already exists"
+              ;;
+            *)
+              echo "Database $${db} was not created (HTTP $${code})" >&2
+              cat /tmp/livesync-db-body >&2 || true
+              exit 1
+              ;;
+          esac
+        done
+        IFS=$$old_ifs
+
+        echo "==> CouchDB initialization complete"
+        echo "    Username : $${username}"
+        echo "    Databases: $${databases}"
     volumes:
-      - ./couchdb-init.sh:/couchdb-init.sh:ro
       - ${APP_DATA_DIR}:/mnt/app:ro
     depends_on:
       setup:
         condition: service_completed_successfully
       couchdb:
         condition: service_healthy
-
-  status:
-    image: python:3.13-alpine@sha256:9ef1a599f863231c3d91e941389bfdc4a2d6070557243d54df1a4e57015b960e
-    restart: on-failure
-    environment:
-      COUCHDB_USER: livesync
-      COUCHDB_PASSWORD: ${APP_PASSWORD}
-      COUCHDB_URL: http://watchersvault-livesync_couchdb_1:5984
-      LIVESYNC_ENV: /mnt/app/.env
-      TS_ENV: /mnt/app/data/tailscale/.env
-      VAULTS_PATH: /vaults
-    command: ["python", "-u", "/opt/status-server.py"]
-    volumes:
-      - ./status-server.py:/opt/status-server.py:ro
-      - ${APP_DATA_DIR}:/mnt/app
-    depends_on:
-      setup:
-        condition: service_completed_successfully
-    healthcheck:
-      test:
-        - CMD
-        - python
-        - -c
-        - import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=4)
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 10s
-
-  # Separate tailnet node. It does not replace the Umbrel Tailscale app and it
-  # does not listen on the host's ports. NET_ADMIN is only for its tun device.
-  ts:
-    image: tailscale/tailscale:v1.104.4@sha256:ed6480b33c6eb67c9cbd203ed42b9fb57e361986725b6856def71b7a3d9e276c
-    restart: on-failure
-    cap_add:
-      - NET_ADMIN
-      - NET_RAW
-    devices:
-      - /dev/net/tun:/dev/net/tun
-    environment:
-      TS_STATE_DIR: /var/lib/tailscale
-      TS_SOCKET: /var/run/tailscale/tailscaled.sock
-      TS_USERSPACE: "false"
-    volumes:
-      - ${APP_DATA_DIR}/data/tailscale:/var/lib/tailscale
-      - ts-run:/var/run/tailscale
-    depends_on:
-      setup:
-        condition: service_completed_successfully
-    entrypoint: ["/bin/sh", "-c"]
-    command:
-      - |
-        auth=
-        if [ -f /var/lib/tailscale/.env ]; then
-          while IFS= read -r line || [ -n "$$line" ]; do
-            trim=$$line
-            while :; do
-              case $$trim in
-                [[:space:]]*) trim=$${trim#?} ;;
-                *) break ;;
-              esac
-            done
-            case $$trim in
-              TS_AUTHKEY=*)
-                auth=$${trim#TS_AUTHKEY=}
-                case $$auth in
-                  \"*\") auth=$${auth#\"}; auth=$${auth%\"} ;;
-                  \'*\') auth=$${auth#\'}; auth=$${auth%\'} ;;
-                esac
-                ;;
-            esac
-          done < /var/lib/tailscale/.env
-        fi
-        unset TS_AUTHKEY
-        if [ -n "$$auth" ]; then
-          export TS_AUTHKEY="$$auth"
-        fi
-        unset auth
-        if [ -z "$${TS_AUTHKEY:-}" ] && [ ! -s /var/lib/tailscale/tailscaled.state ]; then
-          echo "Tailscale HTTPS is off."
-          exec sleep infinity
-        fi
-        export TS_HOSTNAME="$${TS_HOSTNAME:-livesync}"
-        exec /usr/local/bin/containerboot
-
-  # HTTPS for a *.ts.net name. Caddy asks this sidecar for the certificate.
-  # With no public URL, this process waits and binds nothing.
-  caddy:
-    image: caddy:2.10.2-alpine@sha256:4c6e91c6ed0e2fa03efd5b44747b625fec79bc9cd06ac5235a779726618e530d
-    restart: on-failure
-    network_mode: service:ts
-    depends_on:
-      couchdb:
-        condition: service_healthy
-      ts:
-        condition: service_started
-    volumes:
-      - ts-run:/var/run/tailscale
-      - ${APP_DATA_DIR}/data/caddy:/data
-    environment:
-      XDG_DATA_HOME: /data
-    entrypoint: ["/bin/sh", "-c"]
-    command:
-      - |
-        raw="$${LIVESYNC_URL:-}"
-        host="$${raw#https://}"
-        host="$${host#http://}"
-        host="$${host%%/*}"
-        host="$${host%%:*}"
-        if [ -z "$$host" ]; then
-          echo "Public HTTPS is off."
-          exec sleep infinity
-        fi
-        case $$host in
-          *.ts.net) ;;
-          *)
-            echo "LIVESYNC_URL must be an https://*.ts.net address."
-            exec sleep infinity
-            ;;
-        esac
-        printf '%s' "$$host" | grep -Eq '^[A-Za-z0-9.-]+$$' || {
-          echo "LIVESYNC_URL host is not a hostname."
-          exec sleep infinity
-        }
-        mkdir -p /etc/caddy
-        cat > /etc/caddy/Caddyfile << EOF
-        {
-        	auto_https disable_redirects
-        }
-
-        $$host {
-        	reverse_proxy watchersvault-livesync_couchdb_1:5984 {
-        		flush_interval -1
-        		header_up Host {host}
-        		header_up X-Forwarded-For {remote_host}
-        		header_up X-Forwarded-Proto {scheme}
-        	}
-        	log {
-        		output stdout
-        		level WARN
-        	}
-        }
-        EOF
-        i=0
-        while [ "$$i" -lt 30 ] && [ ! -S /var/run/tailscale/tailscaled.sock ]; do
-          i=$$((i + 1))
-          sleep 2
-        done
-        exec caddy run --config /etc/caddy/Caddyfile --adapter caddyfile
-
-volumes:
-  ts-run:
